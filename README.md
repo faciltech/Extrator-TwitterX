@@ -1,3 +1,6 @@
+<h1 align="center">
+  🕵️ Twitter/X OSINT Visual Extractor
+</h1>
 Ferramenta web voltada para investigação OSINT que permite extrair, analisar e visualizar dados do Twitter/X a partir de respostas JSON capturadas diretamente das requisições da plataforma.
 
 O projeto transforma dados brutos de rede em informações estruturadas e diagramas visuais de vínculos, facilitando análises de relacionamento, autoria e interação entre perfis.
