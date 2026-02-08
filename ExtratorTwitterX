@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Extrator Twitter/X Completo</title>
+
+<style>
+body{
+    font-family: Arial;
+    background:#1e1e1e;
+    color:white;
+    padding:20px;
+}
+
+textarea{
+    width:100%;
+    height:200px;
+    background:#2d2d2d;
+    color:white;
+    border:none;
+    padding:10px;
+}
+
+select, button{
+    padding:10px;
+    margin:5px;
+    background:#00acee;
+    border:none;
+    color:white;
+    cursor:pointer;
+}
+
+.card{
+    background:#2b2b2b;
+    padding:20px;
+    margin-top:20px;
+    border-radius:10px;
+}
+
+.obs{
+    background:#333;
+    padding:15px;
+    border-radius:8px;
+    margin-bottom:15px;
+    font-size:14px;
+}
+
+img{
+    max-width:250px;
+    margin-top:10px;
+    border-radius:8px;
+}
+
+.comentario{
+    border-top:1px solid #444;
+    margin-top:15px;
+    padding-top:15px;
+}
+
+.diagram{
+    margin-top:30px;
+    padding:20px;
+    background:#222;
+    border-radius:10px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>🐦 Extrator Twitter/X</h2>
+<h3>Professor: Eduardo Amaral<h3/><br>
+<div class="obs">
+
+<b>📌 Observação Importante:</b><br><br>
+
+✔ Perfil → <b>UserByScreenName</b><br>
+✔ Postagem → <b>tweetResult ou  tweetResultByRestld</b><br>
+✔ Comentários → <b>TweetDetail</b>
+</div>
+
+<select id="modo">
+    <option value="perfil">Extrair informações do Perfil</option>
+    <option value="tweet">Extrair informações da Postagem</option>
+    <option value="comentarios">Extrair Comentários</option>
+</select>
+
+<button onclick="executar()">Executar</button>
+
+<br><br>
+
+<textarea id="jsonInput" placeholder="Cole o JSON aqui"></textarea>
+
+<div id="resultado"></div>
+
+<script>
+
+function executar(){
+
+    let modo = document.getElementById("modo").value;
+
+    if(modo === "perfil") extrairPerfil();
+    if(modo === "tweet") extrairTweet();
+    if(modo === "comentarios") extrairComentarios();
+}
+
+/* ================= PERFIL ================= */
+
+function extrairPerfil(){
+
+    let json = lerJSON();
+    if(!json) return;
+
+    let user = json?.data?.user?.result;
+    if(!user) return alert("Perfil não encontrado");
+
+    let legacy = user.legacy || {};
+
+    let html = `
+        <div class="card">
+        <h2>${user.core?.name} (@${user.core?.screen_name})</h2>
+
+        <b>ID:</b> ${user.rest_id}<br>
+        <b>Criado:</b> ${user.core?.created_at}<br>
+        <b>Local:</b> ${user.location?.location || "N/A"}<br>
+        <b>Seguidores:</b> ${legacy.followers_count}<br>
+        <b>Seguindo:</b> ${legacy.friends_count}<br>
+        <b>Total Tweets:</b> ${legacy.statuses_count}<br>
+        <b>Verificado:</b> ${user.is_blue_verified ? "Sim ✅" : "Não"}<br><br>
+
+        <b>Bio:</b><br>${legacy.description}<br><br>
+
+        <img src="${user.avatar?.image_url}">
+        <br><br>
+        <img src="${legacy.profile_banner_url}">
+        </div>
+    `;
+
+    mostrar(html);
+}
+
+/* ================= TWEET ================= */
+
+function extrairTweet(){
+
+    let json = lerJSON();
+    if(!json) return;
+
+    let tweet = json?.data?.tweetResult?.result;
+    if(!tweet) return alert("Tweet não encontrado");
+
+    let legacy = tweet.legacy || {};
+    let usuario = tweet.core?.user_results?.result;
+
+    let texto = legacy.full_text ||
+        tweet.note_tweet?.note_tweet_results?.result?.text;
+
+    let mencoes = [];
+    if(legacy.entities?.user_mentions){
+        mencoes = legacy.entities.user_mentions.map(u => "@"+u.screen_name);
+    }
+
+    let midias = [];
+    if(legacy.extended_entities?.media){
+        midias = legacy.extended_entities.media.map(m => m.media_url_https);
+    }
+
+    let html = `
+        <div class="card">
+
+        <h3>${usuario?.core?.name} (@${usuario?.core?.screen_name})</h3>
+        <img src="${usuario?.avatar?.image_url}"><br><br>
+
+        <b>📝 Texto:</b><br>${texto}<br><br>
+
+        <b>❤️ Curtidas:</b> ${legacy.favorite_count}<br>
+        <b>🔁 Retweets:</b> ${legacy.retweet_count}<br>
+        <b>💬 Comentários:</b> ${legacy.reply_count}<br>
+        <b>📅 Data:</b> ${legacy.created_at}<br>
+        <b>👥 Menções:</b> ${mencoes.join(", ") || "Nenhuma"}<br><br>
+
+        <b>📷 Mídia:</b><br>
+    `;
+
+    midias.forEach(m => {
+        html += `<img src="${m}">`;
+    });
+
+    html += "</div>";
+
+    mostrar(html);
+}
+
+/* ================= COMENTÁRIOS ================= */
+
+function extrairComentarios(){
+
+    let json = lerJSON();
+    if(!json) return;
+
+    let instrucoes = json?.data?.threaded_conversation_with_injections_v2?.instructions;
+    if(!instrucoes) return alert("Comentários não encontrados");
+
+    let comentarios = [];
+    let autorPrincipal = null;
+
+    instrucoes.forEach(inst => {
+
+        if(inst.entries){
+
+            inst.entries.forEach(entry => {
+
+                // POST PRINCIPAL
+                if(entry.content?.itemContent?.tweet_results){
+                    let tweet = entry.content.itemContent.tweet_results.result;
+                    autorPrincipal = tweet?.core?.user_results?.result?.rest_id;
+                }
+
+                // RESPOSTAS
+                if(entry.content?.items){
+
+                    entry.content.items.forEach(item => {
+
+                        let tweet = item.item?.itemContent?.tweet_results?.result;
+                        if(!tweet) return;
+
+                        let user = tweet.core?.user_results?.result;
+                        let legacy = tweet.legacy || {};
+
+                        comentarios.push({
+                            id:user?.rest_id,
+                            nome:user?.core?.name,
+                            nick:user?.core?.screen_name,
+                            foto:user?.avatar?.image_url,
+                            texto:legacy.full_text
+                        });
+
+                    });
+
+                }
+
+            });
+
+        }
+
+    });
+
+    /* ====== MOSTRAR COMENTÁRIOS ====== */
+
+    let html = `<div class="card"><h2>💬 Comentários</h2>`;
+
+    comentarios.forEach(c => {
+
+        html += `
+        <div class="comentario">
+
+            <img src="${c.foto}">
+            <br>
+            <b>${c.nome} (@${c.nick})</b><br>
+            <b>ID:</b> ${c.id}<br><br>
+
+            ${c.texto}
+
+        </div>
+        `;
+
+    });
+
+    /* ====== DIAGRAMA ====== */
+
+    html += `<div class="diagram"><h3>🔗 Diagrama de Vínculo</h3>`;
+
+    html += `<b>Post Principal ID:</b> ${autorPrincipal}<br><br>`;
+
+    comentarios.forEach(c => {
+        html += `
+        ${autorPrincipal}  
+        ├── ${c.nick} (${c.id})<br>
+        `;
+    });
+
+    html += `</div></div>`;
+
+    mostrar(html);
+}
+
+/* ================= UTIL ================= */
+
+function lerJSON(){
+    try{
+        return JSON.parse(document.getElementById("jsonInput").value);
+    }catch{
+        alert("JSON inválido");
+        return null;
+    }
+}
+
+function mostrar(html){
+    document.getElementById("resultado").innerHTML = html;
+}
+
+</script>
+
+</body>
+</html>
